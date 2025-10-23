@@ -5,28 +5,28 @@
 // 確保這是全域變數
 let finalScore = 0; 
 let maxScore = 0;
-// 修正：給 scoreText 一個有意義的初始值
-let scoreText = "等待成績分數..."; 
+// 初始提示文字：確保在未收到分數時有內容顯示
+let scoreText = "等待成績分數 (請先完成作答)"; 
 let fireworks = []; // 全域陣列，用於儲存所有的煙火物件
 let gravity; // 全域變數，用於模擬重力
 
+
+// 監聽來自 H5P 或其他 iframe 的分數訊息
 window.addEventListener('message', function (event) {
-    // ... 執行來源驗證 ...
+    // 執行來源驗證... (建議實際應用中加入)
+    // ...
     const data = event.data;
     
     if (data && data.type === 'H5P_SCORE_RESULT') {
         
         // !!! 關鍵步驟：更新全域變數 !!!
-        finalScore = data.score; // 更新全域變數
+        finalScore = data.score; 
         maxScore = data.maxScore;
         scoreText = `最終成績分數: ${finalScore}/${maxScore}`;
         
         console.log("新的分數已接收:", scoreText); 
         
-        // ----------------------------------------
-        // 關鍵步驟 2: 呼叫重新繪製 (如果 noLoop() 被使用，則需要)
-        // 但因為我們將允許 draw() 持續執行，這裡可以保留或移除。
-        // 保留 redraw() 是為了確保在收到分數時立即更新畫面。
+        // 確保在收到分數時畫面立即更新
         if (typeof redraw === 'function') {
             redraw(); 
         }
@@ -47,10 +47,12 @@ class Particle {
         this.hu = hu; 
         
         if (this.isFirework) {
-            this.vel = createVector(0, random(-12, -8)); 
+            // 火箭向上飛的初始速度
+            this.vel = createVector(0, random(-15, -10)); // 提高速度讓它更快到達頂部
         } else {
+            // 爆炸碎片向四周飛濺的初始速度
             this.vel = p5.Vector.random2D();
-            this.vel.mult(random(1, 8)); 
+            this.vel.mult(random(1, 10)); 
         }
         this.acc = createVector(0, 0); 
     }
@@ -61,8 +63,8 @@ class Particle {
 
     update() {
         if (!this.isFirework) {
-            this.vel.mult(0.9); 
-            this.lifespan -= 4; 
+            this.vel.mult(0.9); // 碎片逐漸減速
+            this.lifespan -= 4; // 碎片逐漸消失
         }
         this.vel.add(this.acc);
         this.pos.add(this.vel);
@@ -71,7 +73,8 @@ class Particle {
 
     // 煙火火箭的繪製
     show() {
-        colorMode(HSB);
+        // HSB 顏色模式用於煙火
+        colorMode(HSB); 
         if (!this.isFirework) {
             // 碎片
             strokeWeight(2);
@@ -82,10 +85,8 @@ class Particle {
             stroke(this.hu, 255, 255);
         }
         point(this.pos.x, this.pos.y);
-        colorMode(RGB); // 繪製完畢切回 RGB (雖然在 draw 裡面會被 HSB 覆蓋，但為了確保單獨執行時的顏色正確性，保留此行)
     }
     
-    // 檢查碎片是否消失
     done() {
         return this.lifespan < 0;
     }
@@ -95,7 +96,9 @@ class Particle {
 class Firework {
     constructor() {
         this.hu = random(255); 
-        this.firework = new Particle(random(width), height, this.hu, true);
+        // 隨機在畫布寬度的中間區域發射 (1/4 寬度到 3/4 寬度)
+        let launchX = random(width * 0.25, width * 0.75); 
+        this.firework = new Particle(launchX, height, this.hu, true);
         this.exploded = false;
         this.particles = [];
     }
@@ -152,35 +155,47 @@ class Firework {
 // -----------------------------------------------------------------
 
 function setup() { 
-    createCanvas(windowWidth / 2, windowHeight / 2); 
-    colorMode(HSB); // 使用 HSB 模式更容易控制顏色變化
-    // 關鍵修復：移除 noLoop()，讓 draw() 持續執行以產生動畫
-    // 您的原始程式碼中沒有 noLoop()，但如果有，請確保它被移除
-    // background(255); // 初始背景
+    // 確保 canvas 尺寸是正數
+    let canvasW = windowWidth / 2;
+    let canvasH = windowHeight / 2;
+
+    // 最小寬度檢查，避免 W=0 導致隨機發射失敗
+    if (canvasW < 200) canvasW = 400; 
+    if (canvasH < 200) canvasH = 400; 
+
+    createCanvas(canvasW, canvasH); 
+    
+    // 關鍵修復：由於煙火需要動畫，我們需要 draw() 持續執行
+    // 如果您曾加入 noLoop()，請將其移除。
     
     // 定義重力向量
     gravity = createVector(0, 0.2); 
+    
+    // 預先產生一個分數，用於測試
+    // finalScore = 10;
+    // maxScore = 10;
 } 
 
 function draw() { 
     // 為了視覺殘留效果 (拖尾)，每次不清空背景，而是繪製一個半透明的黑矩形
+    colorMode(RGB); // 確保背景使用 RGB
     background(0, 0, 0, 25); 
-    colorMode(HSB); // 確保在繪製顏色時使用 HSB 模式
 
     // -----------------------------------------------------------------
     // C. 煙火特效控制 (在滿分時持續燃放)
     // -----------------------------------------------------------------
+    // 安全計算百分比
     let percentage = (maxScore > 0) ? (finalScore / maxScore) * 100 : 0;
     
     if (percentage >= 100 && maxScore > 0) {
-        // 每 10 幀產生一個新的煙火 (可以調整頻率)
+        // 每 10 幀產生一個新的煙火 (調整頻率)
         if (frameCount % 10 === 0) {
-             // 隨機在寬度的 1/4 到 3/4 之間發射，避免太靠近邊緣
              fireworks.push(new Firework()); 
         }
     }
     
     // 更新和繪製所有煙火
+    // 這裡會自動切換到 HSB 模式來繪製煙火顆粒
     for (let i = fireworks.length - 1; i >= 0; i--) {
         fireworks[i].update();
         fireworks[i].show();
@@ -193,56 +208,58 @@ function draw() {
 
     
     // -----------------------------------------------------------------
-    // A. 根據分數區間改變文本顏色和內容
+    // A. 根據分數區間改變文本顏色和內容 (使用 RGB 模式)
     // -----------------------------------------------------------------
-    colorMode(RGB); // 切換回 RGB 模式繪製文字和靜態圖形，避免顏色混淆
+    colorMode(RGB); // 確保文本使用 RGB 模式，顏色更穩定
     textSize(80); 
     textAlign(CENTER);
     
     // 處理分數顯示和顏色
     if (percentage >= 90) {
-        // 滿分或高分：顯示鼓勵文本，使用鮮豔顏色
-        fill(0, 200, 50); // 綠色
+        // 滿分或高分：使用鮮豔顏色
+        fill(0, 255, 0); // 純綠色
         text("恭喜！優異成績！", width / 2, height / 2 - 50);
         
     } else if (percentage >= 60) {
-        // 中等分數：顯示一般文本，使用黃色
-        fill(255, 181, 35); 
+        // 中等分數：使用黃色
+        fill(255, 255, 0); 
         text("成績良好，請再接再厲。", width / 2, height / 2 - 50);
         
     } else if (percentage > 0) {
-        // 低分：顯示警示文本，使用紅色
-        fill(200, 0, 0); 
+        // 低分：使用紅色
+        fill(255, 0, 0); 
         text("需要加強努力！", width / 2, height / 2 - 50);
         
     } else {
         // 尚未收到分數或分數為 0/0
-        fill(150);
-        // 關鍵修復：確保在沒有分數時顯示初始的提示文字
+        // 文本顏色設為白色，確保在黑背景下可見
+        fill(255); 
+        // 關鍵修復：顯示初始的提示文字
         text(scoreText, width / 2, height / 2); 
     }
 
-    // 顯示具體分數（只有在收到成績後才顯示具體分數）
-    if (maxScore > 0) {
-        textSize(50);
-        fill(255); // 讓分數文字在煙火的黑背景下更清晰
+    // 顯示具體分數
+    textSize(50);
+    fill(255); // 白色，確保可見
+    // 不論百分比多少，只要 maxScore > 0 就顯示具體分數
+    if (maxScore > 0 || percentage === 0) { 
         text(`得分: ${finalScore}/${maxScore}`, width / 2, height / 2 + 50);
     }
     
     
     // -----------------------------------------------------------------
-    // B. 根據分數觸發不同的幾何圖形反映 
+    // B. 根據分數觸發不同的幾何圖形反映 (使用 RGB 模式)
     // -----------------------------------------------------------------
     
     if (percentage >= 90) {
         // 畫一個大圓圈代表完美 
-        fill(0, 200, 50, 150); // 綠色帶透明度
+        fill(0, 255, 0, 150); // 綠色帶透明度
         noStroke();
         circle(width / 2, height / 2 + 150, 150);
         
     } else if (percentage >= 60) {
         // 畫一個方形 
-        fill(255, 181, 35, 150); // 黃色帶透明度
+        fill(255, 255, 0, 150); // 黃色帶透明度
         rectMode(CENTER);
         rect(width / 2, height / 2 + 150, 150, 150);
     }
